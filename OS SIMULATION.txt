@@ -1,0 +1,248 @@
+#include <iostream>
+#include <vector>
+#include <queue>
+#include <algorithm>
+#include <unistd.h>
+#include <string.h>
+#include <sys/wait.h>
+#include <iomanip>
+using namespace std;
+struct Process {
+
+int pid;
+int arrivalTime;
+int burstTime;
+int priority;
+int remainingTime;
+int completionTime;
+int waitingTime;
+int turnaroundTime;
+};
+bool compareArrivalAndPriority(const Process& a, const Process& b) {
+if (a.arrivalTime == b.arrivalTime)
+return a.priority < b.priority;
+return a.arrivalTime < b.arrivalTime;
+}
+void roundRobinPriorityScheduling(vector<Process>& processes, int timeQuantum) {
+sort(processes.begin(), processes.end(), compareArrivalAndPriority);
+queue<int> q;
+int currentTime = 0, completed = 0, n = processes.size();
+vector<bool> inQueue(n, false);
+cout << "\nExecution Order:\n";
+while (completed < n) {
+for (int i = 0; i < n; ++i) {
+if (processes[i].arrivalTime <= currentTime &&
+!inQueue[i] && processes[i].remainingTime > 0) {
+q.push(i);
+inQueue[i] = true;
+}
+}
+if (q.empty()) {
+currentTime++;
+continue;
+}
+int idx = q.front();
+q.pop();
+int execTime = min(timeQuantum, processes[idx].remainingTime);
+currentTime += execTime;
+processes[idx].remainingTime -= execTime;
+cout << "P" << processes[idx].pid << " ";
+for (int i = 0; i < n; ++i) {
+if (processes[i].arrivalTime <= currentTime &&
+!inQueue[i] && processes[i].remainingTime > 0) {
+q.push(i);
+inQueue[i] = true;
+}
+
+}
+if (processes[idx].remainingTime > 0) {
+q.push(idx);
+} else {
+processes[idx].completionTime = currentTime;
+processes[idx].turnaroundTime = currentTime - processes[idx].arrivalTime;
+processes[idx].waitingTime = processes[idx].turnaroundTime - processes[idx].burstTime;
+completed++;
+}
+}
+cout << "\n";
+}
+void printSummary(const vector<Process>& processes) {
+cout << "\nFinal Process Table:\n";
+cout << "PID\tArrival\tBurst\tPriority\tWaiting\tTurnaround\n";
+for (size_t i = 0; i < processes.size(); ++i) {
+cout << processes[i].pid << "\t"
+<< processes[i].arrivalTime << "\t"
+<< processes[i].burstTime << "\t"
+<< processes[i].priority << "\t\t"
+<< processes[i].waitingTime << "\t"
+<< processes[i].turnaroundTime << "\n";
+}
+}
+void runCPUScheduling() {
+int n, timeQuantum;
+vector<Process> processes;
+cout << "Enter number of processes: ";
+cin >> n;
+for (int i = 0; i < n; ++i) {
+Process p;
+p.pid = i + 1;
+cout << "\nProcess " << p.pid << ":\nArrival Time: ";
+cin >> p.arrivalTime;
+cout << "Burst Time: ";
+cin >> p.burstTime;
+cout << "Priority (lower = higher priority): ";
+cin >> p.priority;
+p.remainingTime = p.burstTime;
+p.completionTime = p.waitingTime = p.turnaroundTime = 0;
+processes.push_back(p);
+}
+cout << "Enter Time Quantum: ";
+cin >> timeQuantum;
+
+roundRobinPriorityScheduling(processes, timeQuantum);
+printSummary(processes);
+}
+void bankersAlgorithm(int p, int r) {
+int alloc[10][10], max[10][10], avail[10], need[10][10], safeSeq[10];
+bool finish[10] = {false};
+int count = 0;
+cout << "\nEnter Allocation Matrix:\n";
+for (int i = 0; i < p; ++i)
+for (int j = 0; j < r; ++j)
+cin >> alloc[i][j];
+cout << "Enter Max Matrix:\n";
+for (int i = 0; i < p; ++i)
+for (int j = 0; j < r; ++j)
+cin >> max[i][j];
+cout << "Enter Available Resources:\n";
+for (int i = 0; i < r; ++i)
+cin >> avail[i];
+for (int i = 0; i < p; ++i)
+for (int j = 0; j < r; ++j)
+need[i][j] = max[i][j] - alloc[i][j];
+cout << "\nCalculating Safe Sequence...\n";
+while (count < p) {
+bool found = false;
+for (int i = 0; i < p; ++i) {
+if (!finish[i]) {
+bool canProceed = true;
+for (int j = 0; j < r; ++j) {
+if (need[i][j] > avail[j]) {
+canProceed = false;
+break;
+}
+}
+if (canProceed) {
+for (int j = 0; j < r; ++j)
+avail[j] += alloc[i][j];
+safeSeq[count++] = i + 1;
+finish[i] = true;
+found = true;
+}
+}
+}
+if (!found) {
+
+cout << "System is in unsafe state!\n";
+return;
+}
+}
+cout << "Safe sequence is: ";
+for (int i = 0; i < p; ++i)
+cout << "P" << safeSeq[i] << (i < p - 1 ? " -> " : "\n");
+}
+void memoryPaging() {
+int frames, pages, frameSize;
+cout << "Enter total frames: "; cin >> frames;
+cout << "Enter frame size (KB): "; cin >> frameSize;
+cout << "Enter number of pages: "; cin >> pages;
+if (pages > frames) {
+cout << "Error: Not enough frames.\n";
+return;
+}
+vector<int> pageTable(pages);
+cout << "Enter frame for each page:\n";
+for (int i = 0; i < pages; ++i) {
+cout << "Page " << i << ": ";
+cin >> pageTable[i];
+if (pageTable[i] >= frames) {
+cout << "Invalid frame!\n";
+return;
+}
+}
+cout << "\nPage\tFrame\tPhysical Address (KB)\n";
+for (int i = 0; i < pages; ++i)
+cout << i << "\t" << pageTable[i] << "\t" << pageTable[i] * frameSize << "\n";
+}
+void ipcUsingPipe() {
+int fd[2];
+pid_t pid;
+char buffer[100];
+if (pipe(fd) == -1) {
+cerr << "Pipe creation failed.\n";
+return;
+}
+pid = fork();
+if (pid < 0) {
+cerr << "Fork failed.\n";
+return;
+
+}
+if (pid > 0) {
+// Parent process
+close(fd[0]); // Close read end
+cout << "Enter a message to send to child: ";
+string message;
+cin.ignore(); // clear newline from input buffer
+getline(cin, message);
+write(fd[1], message.c_str(), message.size() + 1);
+close(fd[1]); // Close write end
+wait(NULL); // Wait for child to finish
+} else {
+// Child process
+close(fd[1]); // Close write end
+read(fd[0], buffer, sizeof(buffer));
+cout << "Child received: " << buffer << "\n";
+close(fd[0]);
+}
+}
+int main() {
+int choice;
+char continueChoice;
+do {
+cout << "\n----- MENU -----\n";
+cout << "1. CPU Scheduling (Priority + Round Robin)\n";
+cout << "2. Deadlock Detection (Banker's Algorithm)\n";
+cout << "3. Memory Paging\n";
+cout << "4. Interprocess Communication (Pipe)\n";
+cout << "Enter your choice: ";
+cin >> choice;
+switch (choice) {
+case 1:
+runCPUScheduling();
+break;
+case 2: {
+int p, r;
+cout << "Enter number of processes: ";
+cin >> p;
+cout << "Enter number of resources: ";
+cin >> r;
+bankersAlgorithm(p, r);
+break;
+
+}
+case 3:
+memoryPaging();
+break;
+case 4:
+ipcUsingPipe();
+break;
+default:
+cout << "Invalid choice!\n";
+}
+cout << "\nDo you want to continue? (y/n): ";
+cin >> continueChoice;
+} while (continueChoice == 'y' || continueChoice == 'Y');
+cout << "\nProgram terminated. Goodbye!\n";
+return 0;
+}
